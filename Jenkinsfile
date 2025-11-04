@@ -8,26 +8,38 @@ pipeline {
     stages {
         stage('Clone Repository') {
             steps {
-                echo "Cloning Git Repository..."
+                echo "Cloning repository..."
                 checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo "Building Docker Image..."
-                sh 'docker build -t $IMAGE_NAME .'
+                echo "Building Docker image..."
+                sh 'docker build -t $IMAGE_NAME:latest .'
             }
         }
 
-        stage('Run Docker Container') {
+        stage('Push to Docker Hub') {
             steps {
-                echo "Running Docker Container..."
-                // stop if already running
+                echo "Pushing image to Docker Hub..."
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    sh '''
+                        echo "$PASS" | docker login -u "$USER" --password-stdin
+                        docker push $IMAGE_NAME:latest
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Container') {
+            steps {
+                echo "Deploying container..."
                 sh '''
                     docker stop demo-container || true
                     docker rm demo-container || true
-                    docker run -d --name demo-container -p 5000:5000 $IMAGE_NAME
+                    docker run -d --name demo-container -p 5000:5000 $IMAGE_NAME:latest
                 '''
             }
         }
@@ -35,10 +47,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ Build and container started successfully!"
+            echo "✅ Build, Push & Deployment completed successfully!"
         }
         failure {
-            echo "❌ Build failed!"
+            echo "❌ Pipeline failed. Check logs!"
         }
     }
 }
+
